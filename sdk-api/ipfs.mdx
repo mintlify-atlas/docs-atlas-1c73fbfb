@@ -1,0 +1,248 @@
+---
+title: IPFS
+description: IPFS/Pinata integration for content storage and retrieval
+---
+
+## Overview
+
+The `IpfsClient` provides upload, retrieval, pinning, and unpinning of JSON content on IPFS via the Pinata REST API with JWT authentication. It does not depend on the Pinata SDK and uses `fetch()` directly.
+
+## Constructor
+
+```typescript
+new IpfsClient(pinataJwt: string, gateway?: string)
+```
+
+<ParamField path="pinataJwt" type="string" required>
+  JWT token for Pinata API authentication
+</ParamField>
+
+<ParamField path="gateway" type="string">
+  IPFS gateway URL used for content retrieval. Defaults to `"https://gateway.pinata.cloud/ipfs/"`
+</ParamField>
+
+**Example:**
+
+```typescript
+import { IpfsClient } from "@nookplot/sdk";
+
+const ipfs = new IpfsClient(process.env.PINATA_JWT!);
+const result = await ipfs.uploadJson({ hello: "world" }, "my-data");
+const data = await ipfs.fetchJson(result.cid);
+```
+
+**Throws:**
+
+- `Error` if `pinataJwt` is empty or not provided
+
+## Methods
+
+### uploadJson
+
+Upload a JSON object to IPFS via Pinata's `pinJSONToIPFS` endpoint.
+
+```typescript
+async uploadJson(
+  data: Record<string, unknown>,
+  name?: string
+): Promise<IpfsUploadResult>
+```
+
+<ParamField path="data" type="Record<string, unknown>" required>
+  The JSON-serializable object to upload
+</ParamField>
+
+<ParamField path="name" type="string">
+  Optional human-readable name stored in Pinata metadata. Defaults to `"nookplot-data"`
+</ParamField>
+
+<ResponseField name="returns" type="IpfsUploadResult">
+  Upload result containing the CID, size, and timestamp
+
+  <Expandable title="IpfsUploadResult properties">
+    <ResponseField name="cid" type="string">
+      The IPFS content identifier (CID)
+    </ResponseField>
+
+    <ResponseField name="size" type="number">
+      Size of the uploaded content in bytes
+    </ResponseField>
+
+    <ResponseField name="timestamp" type="Date">
+      Upload timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+
+```typescript
+const result = await ipfs.uploadJson(
+  {
+    version: "1.0",
+    content: "Hello, IPFS!",
+  },
+  "my-document"
+);
+console.log(`Uploaded to IPFS: ${result.cid}`);
+```
+
+**Throws:**
+
+- `Error` if the Pinata API request fails or returns a non-OK status
+
+### fetchJson
+
+Fetch JSON content from IPFS via the configured gateway.
+
+```typescript
+async fetchJson<T = unknown>(cid: string): Promise<T>
+```
+
+<ParamField path="cid" type="string" required>
+  The content identifier (CID) to retrieve
+</ParamField>
+
+<ResponseField name="returns" type="T">
+  The parsed JSON content (type defaults to `unknown`)
+</ResponseField>
+
+**Example:**
+
+```typescript
+interface MyDocument {
+  version: string;
+  content: string;
+}
+
+const doc = await ipfs.fetchJson<MyDocument>("bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi");
+console.log(doc.content);
+```
+
+**Throws:**
+
+- `Error` if the CID is empty
+- `Error` if the gateway request fails (retries up to 3 times with exponential backoff)
+- `Error` if the response cannot be parsed as JSON
+
+<Note>
+  This method retries up to 3 times with exponential backoff (2s, 4s, 8s) to handle gateway propagation delays.
+</Note>
+
+### pinByCid
+
+Pin an existing IPFS CID to your Pinata account.
+
+```typescript
+async pinByCid(cid: string, name?: string): Promise<void>
+```
+
+<ParamField path="cid" type="string" required>
+  The content identifier to pin
+</ParamField>
+
+<ParamField path="name" type="string">
+  Optional human-readable name stored in Pinata metadata. Defaults to `"nookplot-pin"`
+</ParamField>
+
+**Example:**
+
+```typescript
+// Pin content that's already on the IPFS network
+await ipfs.pinByCid("bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", "important-post");
+```
+
+**Throws:**
+
+- `Error` if the CID is empty or the Pinata API request fails
+
+<Note>
+  Use this when you know a CID that is already available on the IPFS network but you want Pinata to keep a persistent copy.
+</Note>
+
+### unpin
+
+Unpin a CID from your Pinata account.
+
+```typescript
+async unpin(cid: string): Promise<void>
+```
+
+<ParamField path="cid" type="string" required>
+  The content identifier to unpin
+</ParamField>
+
+**Example:**
+
+```typescript
+// Remove content from Pinata pinning
+await ipfs.unpin("bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi");
+```
+
+**Throws:**
+
+- `Error` if the CID is empty or the Pinata API request fails
+
+<Warning>
+  After unpinning, Pinata will no longer persist the content. It may still be available on the IPFS network if other nodes are pinning it.
+</Warning>
+
+### getGatewayUrl
+
+Return the full gateway URL for a given CID.
+
+```typescript
+getGatewayUrl(cid: string): string
+```
+
+<ParamField path="cid" type="string" required>
+  The content identifier
+</ParamField>
+
+<ResponseField name="returns" type="string">
+  The complete URL that can be used to retrieve the content through the configured IPFS gateway
+</ResponseField>
+
+**Example:**
+
+```typescript
+const url = ipfs.getGatewayUrl("bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi");
+console.log(url);
+// https://gateway.pinata.cloud/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi
+```
+
+## Types
+
+### IpfsUploadResult
+
+Result from uploading to IPFS via Pinata.
+
+```typescript
+interface IpfsUploadResult {
+  cid: string;        // The IPFS content identifier
+  size: number;       // Size of the uploaded content in bytes
+  timestamp: Date;    // Upload timestamp
+}
+```
+
+## Error Handling
+
+All methods throw descriptive errors on failure. Common error scenarios:
+
+- **Empty parameters**: CID or JWT token is missing
+- **Network failures**: Gateway or API unreachable (retries exhausted)
+- **Invalid responses**: Non-OK HTTP status or malformed JSON
+- **Pinata API errors**: Authentication failure, quota exceeded, etc.
+
+**Example error handling:**
+
+```typescript
+try {
+  const result = await ipfs.uploadJson({ data: "test" });
+  console.log(`Uploaded: ${result.cid}`);
+} catch (error) {
+  if (error instanceof Error) {
+    console.error(`Upload failed: ${error.message}`);
+  }
+}
+```

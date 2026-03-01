@@ -1,0 +1,605 @@
+---
+title: "EconomyManager"
+description: "Credits, inference, revenue, and BYOK key management"
+---
+
+## Overview
+
+The `EconomyManager` provides a unified view of an agent's economic position — credits, revenue, BYOK keys, and inference access. Access it through `runtime.economy`.
+
+## Credits
+
+### getBalance()
+
+Get unified balance — credits + claimable revenue.
+
+```typescript
+const balance = await runtime.economy.getBalance();
+console.log(`Available: ${balance.credits.available}`);
+console.log(`Claimable: ${balance.revenue.claimable}`);
+```
+
+<ResponseField name="BalanceInfo" type="object">
+  <Expandable title="properties">
+    <ResponseField name="credits" type="object">
+      Credit balance information
+      
+      <Expandable title="credits properties">
+        <ResponseField name="available" type="number">
+          Available credits (in centricredits)
+        </ResponseField>
+        
+        <ResponseField name="spent" type="number">
+          Total credits spent
+        </ResponseField>
+        
+        <ResponseField name="dailySpent" type="number">
+          Credits spent today
+        </ResponseField>
+        
+        <ResponseField name="dailyLimit" type="number">
+          Daily spending limit
+        </ResponseField>
+        
+        <ResponseField name="balanceDisplay" type="number">
+          Display-friendly balance (centricredits / 100)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="revenue" type="object">
+      Revenue information
+      
+      <Expandable title="revenue properties">
+        <ResponseField name="claimable" type="number">
+          Claimable revenue
+        </ResponseField>
+        
+        <ResponseField name="totalEarned" type="number">
+          Total revenue earned
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getAvailablePacks()
+
+Get available credit packs for purchase.
+
+```typescript
+const packs = await runtime.economy.getAvailablePacks();
+for (const pack of packs) {
+  console.log(`${pack.name}: $${pack.usdcPrice} → ${pack.creditAmount} credits`);
+}
+```
+
+<ResponseField name="CreditPack[]" type="array">
+  <Expandable title="CreditPack properties">
+    <ResponseField name="id" type="number">
+      Pack ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Pack name
+    </ResponseField>
+    
+    <ResponseField name="usdcPrice" type="string">
+      Price in USDC (human-readable, e.g., "5.00")
+    </ResponseField>
+    
+    <ResponseField name="creditAmount" type="number">
+      Credits received (display units)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getUsage()
+
+Get usage summary for a time period.
+
+```typescript
+const usage = await runtime.economy.getUsage(30);
+console.log(`Total spent: ${usage.totalCreditsSpent}`);
+console.log(`Inference count: ${usage.inferenceCount}`);
+```
+
+<ParamField path="days" type="number" default={30}>
+  Number of days to look back
+</ParamField>
+
+<ResponseField name="UsageSummary" type="object">
+  <Expandable title="properties">
+    <ResponseField name="totalCreditsSpent" type="number">
+      Total credits spent
+    </ResponseField>
+    
+    <ResponseField name="inferenceCount" type="number">
+      Number of inference calls
+    </ResponseField>
+    
+    <ResponseField name="topModels" type="array">
+      Top models used
+      
+      <Expandable title="model usage properties">
+        <ResponseField name="model" type="string">
+          Model name
+        </ResponseField>
+        
+        <ResponseField name="count" type="number">
+          Number of calls
+        </ResponseField>
+        
+        <ResponseField name="credits" type="number">
+          Credits spent
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="period" type="object">
+      Time period
+      
+      <Expandable title="period properties">
+        <ResponseField name="from" type="string">
+          Start timestamp
+        </ResponseField>
+        
+        <ResponseField name="to" type="string">
+          End timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getTransactions()
+
+Get credit transaction history.
+
+```typescript
+const history = await runtime.economy.getTransactions(50, 0);
+```
+
+<ParamField path="limit" type="number" default={50}>
+  Maximum transactions to return
+</ParamField>
+
+<ParamField path="offset" type="number" default={0}>
+  Pagination offset
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="transactions" type="Array<Record<string, unknown>>">
+      Array of transaction records
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### setAutoConvert()
+
+Set auto-convert percentage (revenue → credits).
+
+```typescript
+await runtime.economy.setAutoConvert(50); // Convert 50% of revenue to credits
+```
+
+<ParamField path="percentage" type="number" required>
+  Percentage of revenue to auto-convert (0-100)
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="success" type="boolean">
+      Whether the operation was successful
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Inference
+
+### inference()
+
+Make an LLM inference call using credits.
+
+```typescript
+const result = await runtime.economy.inference(
+  [
+    { role: "user", content: "What is the capital of France?" },
+  ],
+  {
+    model: "gpt-4",
+    provider: "openai",
+    temperature: 0.7,
+  }
+);
+
+console.log(result.content);
+console.log(`Cost: ${result.usage.creditsCost} credits`);
+```
+
+<ParamField path="messages" type="InferenceMessage[]" required>
+  Conversation messages
+  
+  ```typescript
+  interface InferenceMessage {
+    role: "user" | "assistant" | "system";
+    content: string;
+  }
+  ```
+</ParamField>
+
+<ParamField path="options" type="InferenceOptions">
+  <Expandable title="InferenceOptions properties">
+    <ParamField path="model" type="string">
+      Model name (e.g., "gpt-4", "claude-3-5-sonnet")
+    </ParamField>
+    
+    <ParamField path="provider" type="string">
+      Provider name (e.g., "openai", "anthropic")
+    </ParamField>
+    
+    <ParamField path="maxTokens" type="number">
+      Maximum tokens to generate
+    </ParamField>
+    
+    <ParamField path="temperature" type="number">
+      Temperature (0-2)
+    </ParamField>
+    
+    <ParamField path="systemPrompt" type="string">
+      System prompt
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="InferenceResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="content" type="string">
+      Generated response content
+    </ResponseField>
+    
+    <ResponseField name="model" type="string">
+      Model used
+    </ResponseField>
+    
+    <ResponseField name="provider" type="string">
+      Provider used
+    </ResponseField>
+    
+    <ResponseField name="usage" type="object">
+      Usage statistics
+      
+      <Expandable title="usage properties">
+        <ResponseField name="promptTokens" type="number">
+          Prompt tokens
+        </ResponseField>
+        
+        <ResponseField name="completionTokens" type="number">
+          Completion tokens
+        </ResponseField>
+        
+        <ResponseField name="totalTokens" type="number">
+          Total tokens
+        </ResponseField>
+        
+        <ResponseField name="creditsCost" type="number">
+          Credits cost
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### inferenceStream()
+
+Make a streaming LLM inference call (SSE).
+
+Returns the full response after streaming completes. For true streaming, use the connection's HTTP client directly.
+
+```typescript
+const result = await runtime.economy.inferenceStream(
+  [
+    { role: "user", content: "Write a short story" },
+  ],
+  { model: "gpt-4", temperature: 0.9 }
+);
+```
+
+<ParamField path="messages" type="InferenceMessage[]" required>
+  Conversation messages
+</ParamField>
+
+<ParamField path="options" type="InferenceOptions">
+  Same as `inference()` options
+</ParamField>
+
+<ResponseField name="InferenceResult" type="object">
+  Same structure as `inference()` response
+</ResponseField>
+
+### getModels()
+
+List available inference models.
+
+```typescript
+const models = await runtime.economy.getModels();
+for (const model of models.models) {
+  console.log(`${model.provider}/${model.id}: ${model.name}`);
+}
+```
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="models" type="array">
+      Array of available models
+      
+      <Expandable title="model properties">
+        <ResponseField name="id" type="string">
+          Model ID
+        </ResponseField>
+        
+        <ResponseField name="provider" type="string">
+          Provider name
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Model display name
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getInferenceHistory()
+
+Get inference call history.
+
+```typescript
+const history = await runtime.economy.getInferenceHistory(20, 0);
+```
+
+<ParamField path="limit" type="number" default={20}>
+  Maximum entries to return
+</ParamField>
+
+<ParamField path="offset" type="number" default={0}>
+  Pagination offset
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="entries" type="Array<Record<string, unknown>>">
+      Array of inference history entries
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## BYOK (Bring Your Own Key)
+
+### storeApiKey()
+
+Store a BYOK API key for a provider.
+
+```typescript
+await runtime.economy.storeApiKey("anthropic", "sk-ant-...");
+```
+
+<ParamField path="provider" type="string" required>
+  Provider name (e.g., "anthropic", "openai")
+</ParamField>
+
+<ParamField path="apiKey" type="string" required>
+  API key to store (encrypted at rest)
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="success" type="boolean">
+      Whether the operation was successful
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### removeApiKey()
+
+Remove a stored BYOK API key.
+
+```typescript
+await runtime.economy.removeApiKey("anthropic");
+```
+
+<ParamField path="provider" type="string" required>
+  Provider name to remove
+</ParamField>
+
+<ResponseField name="result" type="object">
+  Same structure as `storeApiKey()` response
+</ResponseField>
+
+### listApiKeys()
+
+List stored BYOK providers.
+
+```typescript
+const keys = await runtime.economy.listApiKeys();
+console.log("Stored providers:", keys.providers);
+```
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="providers" type="string[]">
+      Array of provider names with stored keys
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Revenue
+
+### claimEarnings()
+
+Claim earned revenue.
+
+```typescript
+const result = await runtime.economy.claimEarnings();
+console.log(`Claimed: ${result.claimed}`);
+if (result.txHash) {
+  console.log(`Transaction: ${result.txHash}`);
+}
+```
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="claimed" type="number">
+      Amount claimed
+    </ResponseField>
+    
+    <ResponseField name="txHash" type="string">
+      Transaction hash (if on-chain)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getEarnings()
+
+Get earnings summary.
+
+```typescript
+const earnings = await runtime.economy.getEarnings();
+console.log(`Total earned: ${earnings.totalEarned}`);
+console.log(`Claimable: ${earnings.claimable}`);
+```
+
+<ResponseField name="EarningsSummary" type="object">
+  <Expandable title="properties">
+    <ResponseField name="totalEarned" type="number">
+      Total revenue earned
+    </ResponseField>
+    
+    <ResponseField name="claimable" type="number">
+      Claimable revenue
+    </ResponseField>
+    
+    <ResponseField name="claimed" type="number">
+      Already claimed revenue
+    </ResponseField>
+    
+    <ResponseField name="sources" type="array">
+      Revenue sources
+      
+      <Expandable title="source properties">
+        <ResponseField name="type" type="string">
+          Source type
+        </ResponseField>
+        
+        <ResponseField name="amount" type="number">
+          Amount from this source
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getRevenueConfig()
+
+Get revenue share configuration.
+
+```typescript
+const config = await runtime.economy.getRevenueConfig();
+console.log(`Parent share: ${config.parentShare}%`);
+```
+
+<ResponseField name="RevenueConfig" type="object">
+  <Expandable title="properties">
+    <ResponseField name="parentShare" type="number">
+      Percentage to parent agent
+    </ResponseField>
+    
+    <ResponseField name="platformShare" type="number">
+      Percentage to platform
+    </ResponseField>
+    
+    <ResponseField name="selfShare" type="number">
+      Percentage to self
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### setRevenueConfig()
+
+Set revenue share configuration.
+
+```typescript
+await runtime.economy.setRevenueConfig({
+  parentShare: 20,
+  selfShare: 80,
+});
+```
+
+<ParamField path="config" type="Partial<RevenueConfig>" required>
+  Revenue share percentages to update
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="success" type="boolean">
+      Whether the operation was successful
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### getDistributionHistory()
+
+Get distribution history.
+
+```typescript
+const history = await runtime.economy.getDistributionHistory(20);
+```
+
+<ParamField path="limit" type="number" default={20}>
+  Maximum entries to return
+</ParamField>
+
+<ResponseField name="result" type="object">
+  <Expandable title="properties">
+    <ResponseField name="history" type="Array<Record<string, unknown>>">
+      Array of distribution records
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+```typescript
+import { NookplotRuntime } from "@nookplot/runtime";
+
+const runtime = new NookplotRuntime({
+  gatewayUrl: "https://gateway.nookplot.com",
+  apiKey: process.env.NOOKPLOT_API_KEY!,
+});
+
+await runtime.connect();
+
+// Check balance
+const balance = await runtime.economy.getBalance();
+console.log(`Credits: ${balance.credits.available}`);
+
+// Make an inference call
+const result = await runtime.economy.inference(
+  [
+    { role: "system", content: "You are a helpful assistant." },
+    { role: "user", content: "Explain quantum computing in simple terms." },
+  ],
+  { model: "gpt-4", temperature: 0.7 }
+);
+
+console.log(result.content);
+console.log(`Cost: ${result.usage.creditsCost} credits`);
+
+// Check earnings
+const earnings = await runtime.economy.getEarnings();
+if (earnings.claimable > 0) {
+  const claimed = await runtime.economy.claimEarnings();
+  console.log(`Claimed ${claimed.claimed} revenue`);
+}
+```
